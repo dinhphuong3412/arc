@@ -192,7 +192,6 @@ function arcMenu() {
     deleteConfigKey "arc.confdone" "${USER_CONFIG_FILE}"
     deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
-		writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
     if [ -f "${ORI_ZIMAGE_FILE}" ]; then
       # Delete old files
       rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
@@ -384,10 +383,6 @@ function make() {
   BUILD="`readConfigKey "build" "${USER_CONFIG_FILE}"`"
   KVER="`readModelKey "${MODEL}" "builds.${BUILD}.kver"`"
   
-  # Clean old files
-  rm -rf "${UNTAR_PAT_PATH}"
-	rm -f "${DSM_FILE}"
-  
   # Check if all addon exists
   while IFS=': ' read ADDON PARAM; do
     [ -z "${ADDON}" ] && continue
@@ -399,46 +394,57 @@ function make() {
   done < <(readConfigMap "addons" "${USER_CONFIG_FILE}")
 
   # Check for existing files
-  mkdir -p "${CACHE_PATH}/${MODEL}"
-  DSM_FILE="${CACHE_PATH}/${MODEL}/dsm.tar"
-  if [ ! -f "${ORI_ZIMAGE_FILE}" -o ! -f "${ORI_RDGZ_FILE}" ]; then
-    DSM_MODEL="`printf "${MODEL}" | jq -sRr @uri`"
-    #DSM_BUILD="`readModelKey "${MODEL}" "builds.${BUILD}.dsm"`"
-    DSM_LINK="${DSM_MODEL}/${BUILD}/dsm.tar"
-    DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
-    STATUS="`curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}"`"
-    if [ $? -ne 0 -o ${STATUS} -ne 200 ]; then
-      dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
-        --msgbox "No DSM Image found!" 0 0
+  mkdir -p "${CACHE_PATH}/${MODEL}/${BUILD}"
+  DSM_FILE="${CACHE_PATH}/${MODEL}/${BUILD}/dsm.tar"
+  DSM_MODEL="`printf "${MODEL}" | jq -sRr @uri`"
+  # Clean old files
+  rm -rf "${UNTAR_PAT_PATH}"
+  rm -f "${DSM_FILE}"
+  # Get new files
+  DSM_LINK="${DSM_MODEL}/${BUILD}/dsm.tar"
+  DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
+  STATUS="`curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}"`"
+  if [ $? -ne 0 -o ${STATUS} -ne 200 ]; then
+    dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
+      --msgbox "No DSM Image found!" 0 0
+    return 1
+  else
+    dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
+      --infobox "DSM Image Download successful!" 0 0
+  fi
+  # Unpack files
+  if [ -f "${DSM_FILE}" ]; then
+    mkdir -p "${UNTAR_PAT_PATH}"
+    tar -xf "${DSM_FILE}" -C "${UNTAR_PAT_PATH}" >"${LOG_FILE}" 2>&1
+    # Check zImage Hash
+    HASH="`sha256sum ${UNTAR_PAT_PATH}/zImage | awk '{print$1}'`"
+    ZIMAGE_HASH="`cat "${UNTAR_PAT_PATH}/zImage_hash"`"
+    if [ "${HASH}" != "${ZIMAGE_HASH}" ]; then
+      sleep 1
+      dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
+        --msgbox "Hash of zImage not match, try again!" 0 0
       return 1
-    else
-      dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
-        --infobox "DSM Image Download successful!" 0 0
     fi
-    # Unpack files
-    if [ -f "${DSM_FILE}" ]; then
-      mkdir -p "${UNTAR_PAT_PATH}"
-      tar -xf "${DSM_FILE}" -C "${UNTAR_PAT_PATH}" >"${LOG_FILE}" 2>&1
-      # Check zImage Hash
-      HASH="`sha256sum ${UNTAR_PAT_PATH}/zImage | awk '{print$1}'`"
-      ZIMAGE_HASH="`cat "${UNTAR_PAT_PATH}/zImage_hash"`"
-      if [ "${HASH}" != "${ZIMAGE_HASH}" ]; then
-        sleep 1
-        dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
-          --msgbox "Hash of zImage not match, try again!" 0 0
-        return 1
-      fi
+    OLDHASH="`readConfigKey "zimage-hash" "${USER_CONFIG_FILE}"`"
+    if [ "${ZIMAGE_HASH}" != "${OLDHASH}" ]; then
+      NEWIMAGE="true"
       writeConfigKey "zimage-hash" "${ZIMAGE_HASH}" "${USER_CONFIG_FILE}"
-      # Check Ramdisk Hash
-      HASH="`sha256sum ${UNTAR_PAT_PATH}/rd.gz | awk '{print$1}'`"
-      RAMDISK_HASH="`cat "${UNTAR_PAT_PATH}/ramdisk_hash"`"
-      if [ "${HASH}" != "${RAMDISK_HASH}" ]; then
-        sleep 1
-        dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
-          --msgbox "Hash of Ramdisk not match, try again!" 0 0
-        return 1
-      fi
+    fi
+    # Check Ramdisk Hash
+    HASH="`sha256sum ${UNTAR_PAT_PATH}/rd.gz | awk '{print$1}'`"
+    RAMDISK_HASH="`cat "${UNTAR_PAT_PATH}/ramdisk_hash"`"
+    if [ "${HASH}" != "${RAMDISK_HASH}" ]; then
+      sleep 1
+      dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
+        --msgbox "Hash of Ramdisk not match, try again!" 0 0
+      return 1
+    fi
+    OLDHASH="`readConfigKey "ramdisk-hash" "${USER_CONFIG_FILE}"`"
+    if [ "${RAMDISK_HASH}" != "${OLDHASH}" ]; then
+      NEWIMAGE="true"
       writeConfigKey "ramdisk-hash" "${RAMDISK_HASH}" "${USER_CONFIG_FILE}"
+    fi
+    if [ "${NEWIMAGE}" = "true" ]; then
       # Copy DSM Files to locations
       cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${BOOTLOADER_PATH}"
       cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${BOOTLOADER_PATH}"
@@ -446,19 +452,19 @@ function make() {
       cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${SLPART_PATH}"
       cp -f "${UNTAR_PAT_PATH}/zImage"          "${ORI_ZIMAGE_FILE}"
       cp -f "${UNTAR_PAT_PATH}/rd.gz"           "${ORI_RDGZ_FILE}"
-      # Write out .pat variables
-      PAT_MD5_HASH="`cat "${UNTAR_PAT_PATH}/pat_hash"`"
-      PAT_URL="`cat "${UNTAR_PAT_PATH}/pat_url"`"
-      writeConfigKey "arc.pathash" "${PAT_MD5_HASH}" "${USER_CONFIG_FILE}"
-      writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
-    else
-      dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
-        --msgbox "DSM Files extraction failed!" 0 0
-      return 1
     fi
-  else
+    # Write out .pat variables
+    PAT_MD5_HASH="`cat "${UNTAR_PAT_PATH}/pat_hash"`"
+    PAT_URL="`cat "${UNTAR_PAT_PATH}/pat_url"`"
+    writeConfigKey "arc.pathash" "${PAT_MD5_HASH}" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
+  elif [ ! -f "${DSM_FILE}" ]; then
     dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
         --msgbox "DSM Files corrupted!" 0 0
+    return 1
+  else
+    dialog --backtitle "`backtitle`" --title "Error" --aspect 18 \
+      --msgbox "DSM Files extraction failed!" 0 0
     return 1
   fi
 
@@ -480,6 +486,7 @@ function make() {
   sleep 3
   DIRTY=0
   # Build is done
+  writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.builddone" "1" "${USER_CONFIG_FILE}"
   BUILDDONE="`readConfigKey "arc.builddone" "${USER_CONFIG_FILE}"`"
   # Ask for Boot
