@@ -1,5 +1,5 @@
 
-ARPL_VERSION="23.6.11"
+ARPL_VERSION="23.1.1"
 ARPL_TITLE="Arc ${ARPL_VERSION}"
 
 # Define paths
@@ -22,8 +22,6 @@ ARPL_BZIMAGE_FILE="${CACHE_PATH}/bzImage-arpl"
 ARPL_RAMDISK_FILE="${CACHE_PATH}/initrd-arpl"
 MOD_ZIMAGE_FILE="${CACHE_PATH}/zImage-dsm"
 MOD_RDGZ_FILE="${CACHE_PATH}/initrd-dsm"
-BB_MOD_ZIMAGE_FILE="${BACKUPDIR}/zImage-dsm"
-BB_MOD_RDGZ_FILE="${BACKUPDIR}/initrd-dsm"
 ADDONS_PATH="${CACHE_PATH}/addons"
 LKM_PATH="${CACHE_PATH}/lkms"
 MODULES_PATH="${CACHE_PATH}/modules"
@@ -33,4 +31,4 @@ MODEL_CONFIG_PATH="/opt/arpl/model-configs"
 INCLUDE_PATH="/opt/arpl/include"
 PATCH_PATH="/opt/arpl/patch"
 
-MODULE_ALIAS_FILE="/tmp/modules.alias.json"
+MODULE_ALIAS_FILE="${TMP_PATH}/modules.alias.json"
