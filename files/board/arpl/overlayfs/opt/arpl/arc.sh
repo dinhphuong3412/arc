@@ -48,6 +48,7 @@ DIRECTDSM="`readConfigKey "arc.directdsm" "${USER_CONFIG_FILE}"`"
 CONFDONE="`readConfigKey "arc.confdone" "${USER_CONFIG_FILE}"`"
 BUILDDONE="`readConfigKey "arc.builddone" "${USER_CONFIG_FILE}"`"
 ARCPATCH="`readConfigKey "arc.patch" "${USER_CONFIG_FILE}"`"
+REMAP="`readConfigKey "arc.remap" "${USER_CONFIG_FILE}"`"
 
 ###############################################################################
 # Mounts backtitle dynamically
@@ -191,6 +192,7 @@ function arcMenu() {
     deleteConfigKey "arc.confdone" "${USER_CONFIG_FILE}"
     deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
+		writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
     if [ -f "${ORI_ZIMAGE_FILE}" ]; then
       # Delete old files
       rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
@@ -384,6 +386,7 @@ function make() {
   
   # Clean old files
   rm -rf "${UNTAR_PAT_PATH}"
+	rm -f "${DSM_FILE}"
   
   # Check if all addon exists
   while IFS=': ' read ADDON PARAM; do
@@ -398,29 +401,22 @@ function make() {
   # Check for existing files
   mkdir -p "${CACHE_PATH}/${MODEL}"
   DSM_FILE="${CACHE_PATH}/${MODEL}/dsm.tar"
-  rm -f "${DSM_FILE}"
   if [ ! -f "${ORI_ZIMAGE_FILE}" -o ! -f "${ORI_RDGZ_FILE}" ]; then
-    if [ ! -f "${DSM_FILE}" ]; then
-      DSM_MODEL=`printf "${MODEL}" | jq -sRr @uri`
-      #DSM_BUILD="`readModelKey "${MODEL}" "builds.${BUILD}.dsm"`"
-      DSM_LINK="${DSM_MODEL}/${BUILD}/dsm.tar"
-      DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
-      STATUS="`curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}"`"
-      if [ $? -ne 0 -o ${STATUS} -ne 200 ]; then
-        dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
-          --msgbox "No DSM Image found!" 0 0
-        return 1
-      else
-        dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
-          --infobox "DSM Image Download successful!" 0 0
-      fi
+    DSM_MODEL="`printf "${MODEL}" | jq -sRr @uri`"
+    #DSM_BUILD="`readModelKey "${MODEL}" "builds.${BUILD}.dsm"`"
+    DSM_LINK="${DSM_MODEL}/${BUILD}/dsm.tar"
+    DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
+    STATUS="`curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}"`"
+    if [ $? -ne 0 -o ${STATUS} -ne 200 ]; then
+      dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
+        --msgbox "No DSM Image found!" 0 0
+      return 1
     else
-        dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
-            --infobox "DSM Image cached!" 0 0
+      dialog --backtitle "`backtitle`" --title "DSM Download" --aspect 18 \
+        --infobox "DSM Image Download successful!" 0 0
     fi
-    sleep 2
     # Unpack files
-    if [ -e "${DSM_FILE}" ]; then
+    if [ -f "${DSM_FILE}" ]; then
       mkdir -p "${UNTAR_PAT_PATH}"
       tar -xf "${DSM_FILE}" -C "${UNTAR_PAT_PATH}" >"${LOG_FILE}" 2>&1
       # Check zImage Hash
